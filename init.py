@@ -22,7 +22,7 @@ class Init:
         if os.path.isfile("config.txt"):
             self.load_config_file("config.txt")
             self.repository_name = self.config["dir"]
-        self.run()      # Run the launcher
+        self.run()  # Run the launcher
 
     def run(self):
         ''' Main execution area of launcher '''
