@@ -5,6 +5,12 @@ import subprocess
 import sys
 import time
 
+"""
+NOTE:
+Target system must have python > 3.6 installed
+Target system must have pip3 installed and a symlink pointing to pip
+Target system must have virtualenv installed
+"""
 
 class Init:
     def __init__(self):
@@ -17,11 +23,19 @@ class Init:
         self.repository_name = "ClaverNode" # Name of the git repository to load
         self.repository_class_name = self.repository_name   # Name of the entry_point class for the application
         self.repository_url = "https://github.com/mccolm-robotics/" + self.repository_name + ".git"     # Repository URL
-        self.exit_status = 0    # Default exit status for the application
+        self.exit_status = None    # Exit status for the application
 
         if os.path.isfile("config.txt"):
             self.load_config_file("config.txt")
             self.repository_name = self.config["dir"]
+
+        # Make sure module 'psutil' is installed
+        psutil_check = subprocess.run(["pip", "show", "psutil"], capture_output=True, encoding="utf-8")
+        if not psutil_check.stdout:
+            print("Installing psutil")
+            psutil_install = subprocess.run(["pip", "install", "--user", "psutil"], stdout=subprocess.PIPE, text=True, check=True)
+            if psutil_install.returncode:
+                print("Error: Unable to install psutil module")
         self.run()      # Run the launcher
 
     def run(self):
@@ -37,15 +51,10 @@ class Init:
 
         # Check to see if the launcher is running with the default Python interpreter or the virtual environment interpreter
         if sys.executable != self.venv_interpreter:
-            # Make sure psutil is installed
-            psutil_check = subprocess.run(["pip", "show", "psutil"], capture_output=True, encoding="utf-8")
-            if not psutil_check.stdout:
-                print("Installing psutil")
-                psutil_install = subprocess.run(["pip", "install", "--user", "psutil"], stdout=subprocess.PIPE, text=True, check=True)
-                if psutil_install.returncode:
-                    print("Error: Unable to install psutil module")
+
 
             import psutil
+
 
             if not os.path.isdir("venv"):
                 if os.path.isdir(self.repository_name):
@@ -148,7 +157,7 @@ class Init:
 
         return True
 
-    def set_exit_status(self, val):
+    def set_exit_status(self, val, **kwargs):
         ''' Callback function passed to application module. GTK does not allow setting the exit status directly. '''
         self.exit_status = val
 
@@ -172,8 +181,13 @@ class Init:
 
     def evaluate_exit_status(self):
         print(f"Exit Status: {self.exit_status}")
-        if self.exit_status == 1:
-            print("Taking action for status # 1")
+        if self.exit_status is None:
+            print("App failed to start")
+        elif self.exit_status == 0:
+            print("App exited successfully")
+            # ToDo: Update config with successful exit status
+        elif self.exit_status == 1:
+            print("Request to upgrade app")
 
 if __name__ == "__main__":
     Init()
