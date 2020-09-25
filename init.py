@@ -115,6 +115,7 @@ class Init:
                 if clone_git.returncode:
                     print(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
                     return False
+
                 # Modules must not start with a number
                 self.repository_name = "t" + str(self.clock)
                 # Install modules listed in requirements.txt
@@ -130,6 +131,11 @@ class Init:
                     return False
                 self.load_config_file(config)
                 self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
+
+        # Find the latest github release for the ClaverNode project
+        latest_github_release = subprocess.run("git ls-remote --tags --sort=committerdate | grep -o 'v.*' | sort -r | head -1", capture_output=True, shell=True, encoding="utf-8")
+        print(latest_github_release.stdout)
+
         return True
 
     def upgrade_client_app(self):
@@ -206,6 +212,8 @@ https://stackabuse.com/reading-and-writing-json-to-a-file-in-python/
 
 Resources: Git
 https://devconnected.com/how-to-clone-a-git-repository/
+https://gist.github.com/rponte/fdc0724dd984088606b0
+https://stackoverflow.com/questions/4630704/receiving-fatal-not-a-git-repository-when-attempting-to-remote-add-a-git-repo
 
 Resources: Python Packaging
 https://python-packaging-tutorial.readthedocs.io/en/latest/setup_py.html
@@ -218,4 +226,7 @@ https://dev.to/rf_schubert/how-to-create-a-pip-package-and-host-on-private-githu
 https://www.freecodecamp.org/news/how-to-use-github-as-a-pypi-server-1c3b0d07db2/
 https://hackthology.com/how-to-write-self-updating-python-programs-using-pip-and-git.html
 
+Resources: Import module dynamically
+https://stackoverflow.com/questions/31306469/import-from-module-by-importing-via-string/31306598#31306598
+https://stackoverflow.com/questions/301134/how-to-import-a-module-given-its-name-as-string
 """
