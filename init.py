@@ -139,6 +139,8 @@ class Init:
 
         return True
 
+
+
     def upgrade_client_app(self):
         ''' Download the newest version of the client app and restart app. '''
         clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.repository_branch, self.repository_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
