@@ -217,6 +217,7 @@ Resources: Git
 https://devconnected.com/how-to-clone-a-git-repository/
 https://gist.github.com/rponte/fdc0724dd984088606b0
 https://stackoverflow.com/questions/4630704/receiving-fatal-not-a-git-repository-when-attempting-to-remote-add-a-git-repo
+https://stackoverflow.com/questions/15472107/when-listing-git-ls-remote-why-theres-after-the-tag-name/15472310
 
 Resources: Python Packaging
 https://python-packaging-tutorial.readthedocs.io/en/latest/setup_py.html
