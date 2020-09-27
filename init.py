@@ -134,8 +134,8 @@ class Init:
                 self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
 
         # Find the latest github release for the ClaverNode project
-        latest_github_release = subprocess.run("git ls-remote --tags --sort=committerdate | grep -o 'v.*' | sort -r | head -1", capture_output=True, shell=True, encoding="utf-8")
-        print(latest_github_release.stdout)
+        latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
+        print(f"Latest Release: {latest_github_release.stdout}")
 
         return True
 
@@ -218,6 +218,7 @@ https://devconnected.com/how-to-clone-a-git-repository/
 https://gist.github.com/rponte/fdc0724dd984088606b0
 https://stackoverflow.com/questions/4630704/receiving-fatal-not-a-git-repository-when-attempting-to-remote-add-a-git-repo
 https://stackoverflow.com/questions/15472107/when-listing-git-ls-remote-why-theres-after-the-tag-name/15472310
+https://medium.com/@ginnyfahs/github-error-authentication-failed-from-command-line-3a545bfd0ca8  <- Using personal access tokens
 
 Resources: Python Packaging
 https://python-packaging-tutorial.readthedocs.io/en/latest/setup_py.html
