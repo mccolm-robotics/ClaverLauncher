@@ -19,11 +19,13 @@ class Init:
         self.application = None     # Holds an instance of the entry_point class for the application loaded from the github repository linked below
         self.clock = int(time.time())   # Unix timestamp used as a name for the cloned git repository
         self.venv_interpreter = os.getcwd() + "/venv/bin/python"    # Path to the virtual environment copy of the Python intrepreter
-        self.required_modules = []  # List of 3rd party modules required by the Claver launcher
+        self.required_modules = ["requests"]  # List of 3rd party modules required by the Claver launcher
         self.repository_branch = "stable"   # Default branch of the git repository to load
         self.repository_name = "ClaverNode" # Name of the git repository to load
         self.repository_class_name = self.repository_name   # Name of the entry_point class for the application
-        self.repository_url = "https://github.com/mccolm-robotics/" + self.repository_name + ".git"     # Repository URL
+        self.repository_host_url = "https://github.com/mccolm-robotics/"
+        self.repository_raw_host_url = "https://raw.githubusercontent.com/mccolm-robotics/"
+        self.repository_url = self.repository_host_url + self.repository_name + ".git"     # Repository URL
         self.action_request = None    # Exit status for the application
         if os.path.isfile("config.txt"):
             self.load_config_file("config.txt")
@@ -107,6 +109,37 @@ class Init:
         with open('config.txt', 'w') as outfile:
             json.dump(self.config, outfile)
 
+    def load_version_number(self):
+        ''' Loads the version file of node module and returns the contents as a dictionary '''
+        path = self.repository_name + "/VERSION.txt"
+        with open(path) as file:
+            return json.load(file)
+
+    def get_repository_version(self):
+        import requests
+        remote_version = self.repository_raw_host_url + self.repository_class_name + "/" + self.repository_branch + "/" + "VERSION.txt"
+        response = requests.get(remote_version)
+        if response.status_code < 400:
+            return response.json()
+        else:
+            return False
+
+    def check_for_updates(self):
+        remote_version = self.get_repository_version()
+        local_version = self.load_version_number()
+
+        # This value is only relevant when the client module is loaded in a production build
+        latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
+
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]):
+            return True
+        elif int(remote_version["MINOR"]) > int(local_version["MINOR"]):
+            return True
+        elif int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+            return True
+        else:
+            return False
+
     def load_client_app(self):
         ''' Ensures that a running copy of the app has been downloaded. Rolls back any failed version. '''
         if self.config is None:
@@ -125,17 +158,18 @@ class Init:
                 if install_requirements.returncode:
                     print("Error: Failed to load requirements.txt")
                     return False
-                # Set location of config.txt
+                # Update path of config.txt
                 config = self.repository_name + "/src/config.txt"
                 if not os.path.isfile(config):
                     print("Failed to locate config file")
                     return False
                 self.load_config_file(config)
                 self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
-
-        # Find the latest github release for the ClaverNode project
-        latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
-        print(f"Latest Release: {latest_github_release.stdout}")
+                self.config["version"] = self.load_version_number()
+        else:
+            if self.check_for_updates():
+                print("Downloading update")
+                self.upgrade_client_app()
 
         return True
 
@@ -234,4 +268,7 @@ https://hackthology.com/how-to-write-self-updating-python-programs-using-pip-and
 Resources: Import module dynamically
 https://stackoverflow.com/questions/31306469/import-from-module-by-importing-via-string/31306598#31306598
 https://stackoverflow.com/questions/301134/how-to-import-a-module-given-its-name-as-string
+
+Resources: URL Requests
+https://stackoverflow.com/questions/16778435/python-check-if-website-exists
 """
