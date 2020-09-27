@@ -10,7 +10,6 @@ NOTE:
 Target system must have python > 3.6 installed
 Target system must have pip3 installed and a symlink pointing to pip
 Target system must have virtualenv installed
-
 """
 
 class Init:
@@ -116,6 +115,7 @@ class Init:
             return json.load(file)
 
     def get_repository_version(self):
+        ''' Gets the version information for client module from remote repository '''
         import requests
         remote_version = self.repository_raw_host_url + self.repository_class_name + "/" + self.repository_branch + "/" + "VERSION.txt"
         response = requests.get(remote_version)
@@ -125,17 +125,16 @@ class Init:
             return False
 
     def check_for_updates(self):
+        ''' Compares version values between local and remote copies of client module '''
         remote_version = self.get_repository_version()
         local_version = self.load_version_number()
 
         # This value is only relevant when the client module is loaded in a production build
         latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
 
-        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]):
-            return True
-        elif int(remote_version["MINOR"]) > int(local_version["MINOR"]):
-            return True
-        elif int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
+                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
+                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
             return True
         else:
             return False
@@ -172,8 +171,6 @@ class Init:
                 self.upgrade_client_app()
 
         return True
-
-
 
     def upgrade_client_app(self):
         ''' Download the newest version of the client app and restart app. '''
@@ -227,6 +224,7 @@ class Init:
         print(f"Exit Status: {self.action_request}")
         if self.action_request is None:
             print("App failed to start")
+            # ToDo: Implement roll-back if FAIL follows update to new version
         elif self.action_request == 0:
             print("No actionable requests sent")
         elif self.action_request == 1:
@@ -252,7 +250,13 @@ https://devconnected.com/how-to-clone-a-git-repository/
 https://gist.github.com/rponte/fdc0724dd984088606b0
 https://stackoverflow.com/questions/4630704/receiving-fatal-not-a-git-repository-when-attempting-to-remote-add-a-git-repo
 https://stackoverflow.com/questions/15472107/when-listing-git-ls-remote-why-theres-after-the-tag-name/15472310
-https://medium.com/@ginnyfahs/github-error-authentication-failed-from-command-line-3a545bfd0ca8  <- Using personal access tokens
+https://medium.com/@ginnyfahs/github-error-authentication-failed-from-command-line-3a545bfd0ca8  <- Using personal access tokens on cli
+https://stackoverflow.com/questions/4565700/how-to-specify-the-private-ssh-key-to-use-when-executing-shell-command-on-git
+https://gist.github.com/jexchan/2351996 <- Configure multiple SSH Keys for GitHub accounts
+https://kamarada.github.io/en/2019/07/14/using-git-with-ssh-keys/ <- Creating SSH Keys
+https://stackoverflow.com/questions/46226174/getting-git-init-to-automatically-use-ssh <- Using SSH instead of https authentication for git processes
+https://gist.github.com/steinwaywhw/a4cd19cda655b8249d908261a62687f8 <- Getting the latest release version number
+https://devconnected.com/how-to-delete-local-and-remote-tags-on-git/
 
 Resources: Python Packaging
 https://python-packaging-tutorial.readthedocs.io/en/latest/setup_py.html
