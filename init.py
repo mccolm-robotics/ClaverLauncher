@@ -91,6 +91,9 @@ class Init:
             os.mkdir("logs")    # Create the directory
         if os.path.isfile('logs/' + self.repository_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
             os.remove('logs/' + self.repository_name + '.log')
+        # The first run of this program will create a log with the name of the repository.
+        if os.path.isfile('logs/' + self.repository_class_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
+            os.remove('logs/' + self.repository_class_name + '.log')
         # Reset any previous locks on the logger
         logging.getLogger().setLevel(logging.DEBUG)
         logger = logging.getLogger('')
@@ -193,7 +196,7 @@ class Init:
                 # Update path of config.txt
                 config = self.repository_name + "/src/config.txt"
                 if not os.path.isfile(config):
-                    print("Failed to locate config file")
+                    self.logger.error("Failed to locate config file")
                     return False
                 self.load_config_file(config)
                 self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
@@ -231,7 +234,7 @@ class Init:
     def launch_app(self):
         ''' Dynamically loads app based on repository name. Assumes main class matches repository name. Deletes previously installed version of the app. '''
         # Import the module
-        mod = importlib.import_module(f'{self.repository_name}.src.launcher')
+        mod = importlib.import_module(f'{self.repository_name}.src.ClaverNode')
         # Determine a list of names to copy to the current name space
         names = getattr(mod, '__all__', [n for n in dir(mod) if not n.startswith('_')])
         # Copy the name of the entry-point class into the current name space
@@ -248,6 +251,8 @@ class Init:
                 and os.path.isdir(self.config["previous_app_dir"]): # If app ran without error (exit-status == 0), check for previous version of app and delete directory
             self.logger.info("Removing previous version directory")
             subprocess.run(["rm", "-r", self.config["previous_app_dir"]], stdout=subprocess.PIPE, text=True, check=True)
+            if os.path.isfile('logs/' + self.config["previous_app_dir"] + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
+                os.remove('logs/' + self.config["previous_app_dir"] + '.log')
             if not os.path.isdir(self.config["previous_app_dir"]):  # Make sure the directory was deleted
                 del self.config["previous_app_dir"]     # Remove key from the config dictionary
 
