@@ -1,5 +1,6 @@
 import importlib
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -25,17 +26,18 @@ class Init:
         self.repository_host_url = "https://github.com/mccolm-robotics/"
         self.repository_raw_host_url = "https://raw.githubusercontent.com/mccolm-robotics/"
         self.repository_url = self.repository_host_url + self.repository_name + ".git"     # Repository URL
-        self.action_request = None    # Exit status for the application
-        if os.path.isfile("config.txt"):
-            self.load_config_file("config.txt")
-            self.repository_name = self.config["app_dir"]
+        self.action_request = None    # Exit status for the client node run by the launcher
+        if os.path.isfile("config.txt"):    # Check to see if config file already exists
+            self.load_config_file("config.txt")     # Read in file (JSON)
+            self.repository_name = self.config["app_dir"]   # Set the repository name to value stored in config file
+        self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
         # Make sure module 'psutil' is installed
         psutil_check = subprocess.run(["pip", "show", "psutil"], capture_output=True, encoding="utf-8")
         if not psutil_check.stdout:
-            print("Installing psutil")
+            self.logger.info("Installing psutil")
             psutil_install = subprocess.run(["pip", "install", "--user", "psutil"], stdout=subprocess.PIPE, text=True, check=True)
             if psutil_install.returncode:
-                print("Error: Unable to install psutil module")
+                self.logger.error("Error: Unable to install psutil module")
         self.run()      # Run the launcher
 
     def run(self):
@@ -50,40 +52,68 @@ class Init:
         ''' Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. '''
         # Check to see if the launcher is running with the default Python interpreter or the virtual environment interpreter
         if sys.executable != self.venv_interpreter: # Check to see of the app is using the system interpreter.
-            import psutil
+            import psutil   # Make module available in this function
             if not os.path.isdir("venv"):   # Does the virtual environment folder exist?
                 if os.path.isdir(self.repository_name):     # Check to see the repository folder exists. If so, venv has been deleted. Reload repository from stable branch.
-                    subprocess.run(["rm", "-r", self.repository_name], stdout=subprocess.PIPE, text=True, check=True)
+                    subprocess.run(["rm", "-r", self.repository_name], stdout=subprocess.PIPE, text=True, check=True)   # Remove previous repository directory
                     if os.path.isfile("config.txt"):    # Remove old config.txt as it is now outdated
-                        subprocess.run(["rm", "config.txt"], stdout=subprocess.PIPE, text=True, check=True)
+                        subprocess.run(["rm", "config.txt"], stdout=subprocess.PIPE, text=True, check=True)     # Remove previous config file
                 create_venv = subprocess.run(["virtualenv", "venv"], stdout=subprocess.PIPE, text=True, check=True) # Create a new virtual environment
                 if create_venv.returncode:
-                    print("Error: Failed to create VirtualEnv")
+                    self.logger.error("Error: Failed to create VirtualEnv")
             try:
                 p = psutil.Process(os.getpid())     # Get the current process id of this launcher
                 for handler in p.open_files() + p.connections():    # Close any open files and connections held by this process
                     os.close(handler.fd)
             except Exception as e:
-                # logging.error(e)
-                pass
+                self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
             # Relaunch application using virtual environment interpreter
             os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
         else:
             # Executes after application has restarted. Changes path variables to point to venv interpreter.
             exec(open("venv/bin/activate_this.py").read(), {'__file__': "venv/bin/activate_this.py"})
             if self.required_modules:   # List of modules required by this launcher
-                print("Updating modules required by launcher")
+                self.logger.debug("Updating modules required by launcher")
                 for module in self.required_modules:    # Install required modules using pip
                     proc = subprocess.run(["pip", "install", module], capture_output=True, encoding="utf-8")
-                    print(proc.stdout)
-            print("Modules currently installed:")
-            installed_modules = subprocess.run(["pip", "list"], capture_output=True, encoding="utf-8")
+                    self.logger.debug(proc.stdout)
+            installed_modules = subprocess.run(["pip", "list"], capture_output=True, encoding="utf-8")  # Get a list of installed modules registered by pip
             result = installed_modules.stdout
             # result = ' '.join(result.split())
             # result = result[35:]
             # i = iter(result.split(' '))
             # ClaverNode = list(map(" ".join, zip(i, i)))
-            print(result)
+            self.logger.debug(result)
+
+    def setup_logging(self, console=logging.INFO, file=logging.WARNING):
+        ''' Set logger to capture different levels of information. Information logged to file differs (depending on settings) from information displayed to the console (stdout). '''
+        if not os.path.isdir("logs"):   # Check to see if the logs directory exists
+            os.mkdir("logs")    # Create the directory
+        if os.path.isfile('logs/' + self.repository_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
+            os.remove('logs/' + self.repository_name + '.log')
+        # Reset any previous locks on the logger
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger = logging.getLogger('')
+        logger.handlers = []
+
+        self.logger = logging.getLogger(__name__)   # Set logger to name of module
+        # Create handlers
+        c_handler = logging.StreamHandler(stream=sys.stdout)    # Create console logger
+        f_handler = logging.FileHandler('logs/' + self.repository_name + '.log')    # Create file logger
+        c_handler.setLevel(console)     # Set logging level for console logger
+        f_handler.setLevel(file)        # Set logging level for file logger
+
+        # Create formatters and add them to handlers
+        c_format = logging.Formatter('%(message)s')
+        f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        c_handler.setFormatter(c_format)
+        f_handler.setFormatter(f_format)
+
+        # Add handlers to the logger
+        self.logger.addHandler(c_handler)
+        self.logger.addHandler(f_handler)
+
+        self.logger.warning(f'Log initialized for {self.repository_name}') # The minimum logging level for the file logger is set to WARNING
 
     def restart_program(self):
         """ Restarts the current program """
@@ -93,8 +123,7 @@ class Init:
             for handler in p.open_files() + p.connections():
                 os.close(handler.fd)
         except Exception as e:
-            # logging.error(e)
-            pass
+            self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
         # Relaunch application using virtual environment interpreter
         os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
 
@@ -106,7 +135,7 @@ class Init:
     def save_config_file(self):
         ''' Save config information in JSON format to config.txt '''
         with open('config.txt', 'w') as outfile:
-            json.dump(self.config, outfile)
+            json.dump(self.config, outfile, indent=2, sort_keys=True)
 
     def load_version_number(self):
         ''' Loads the version file of node module and returns the contents as a dictionary '''
@@ -116,10 +145,11 @@ class Init:
 
     def get_repository_version(self):
         ''' Gets the version information for client module from remote repository '''
-        import requests
+        import requests     # Make module available for this function
+        # URL of version text file in remote repository
         remote_version = self.repository_raw_host_url + self.repository_class_name + "/" + self.repository_branch + "/" + "VERSION.txt"
         response = requests.get(remote_version)
-        if response.status_code < 400:
+        if response.status_code < 400:  # Make sure that the file was accessible
             return response.json()
         else:
             return False
@@ -127,26 +157,29 @@ class Init:
     def check_for_updates(self):
         ''' Compares version values between local and remote copies of client module '''
         remote_version = self.get_repository_version()
-        local_version = self.load_version_number()
+        if remote_version:  # Make sure the version file returned a value
+            local_version = self.load_version_number()
 
-        # This value is only relevant when the client module is loaded in a production build
-        latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
+            # This value is only relevant when the client module is loaded in a production build
+            latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
 
-        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
-                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
-                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
-            return True
+            # Compare version numbers
+            if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
+                    or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
+                    or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+                return True     # Initiate upgrade
         else:
-            return False
+            self.logger.error("Error: Unable to access remote version file")
+        return False    # Local copy of the repository is at the latest version
 
     def load_client_app(self):
-        ''' Ensures that a running copy of the app has been downloaded. Rolls back any failed version. '''
+        ''' Ensures that a running copy of the app has been downloaded. ToDo: Roll back any failed version. '''
         if self.config is None:
             config = self.repository_name + "/src/config.txt"
             if not os.path.isfile(config):
                 clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.repository_branch, self.repository_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
                 if clone_git.returncode:
-                    print(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
+                    self.logger.error(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
                     return False
 
                 # Modules must not start with a number
@@ -155,7 +188,7 @@ class Init:
                 requirements_path = self.repository_name + "/requirements/requirements.txt"
                 install_requirements = subprocess.run(["pip", "install", "-r", requirements_path], stdout=subprocess.PIPE, text=True, check=True)
                 if install_requirements.returncode:
-                    print("Error: Failed to load requirements.txt")
+                    self.logger.error("Error: Failed to load requirements.txt")
                     return False
                 # Update path of config.txt
                 config = self.repository_name + "/src/config.txt"
@@ -167,7 +200,7 @@ class Init:
                 self.config["version"] = self.load_version_number()
         else:
             if self.check_for_updates():
-                print("Downloading update")
+                self.logger.info("Downloading update")
                 self.upgrade_client_app()
 
         return True
@@ -176,7 +209,7 @@ class Init:
         ''' Download the newest version of the client app and restart app. '''
         clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.repository_branch, self.repository_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
         if clone_git.returncode:
-            print(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
+            self.logger.error(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
             return False
         # Modules must not start with a number
         self.repository_name = "t" + str(self.clock)
@@ -184,7 +217,7 @@ class Init:
         requirements_path = self.repository_name + "/requirements/requirements.txt"
         install_requirements = subprocess.run(["pip", "install", "-r", requirements_path], stdout=subprocess.PIPE, text=True, check=True)
         if install_requirements.returncode:
-            print("Error: Failed to load requirements.txt")
+            self.logger.error("Error: Failed to load requirements.txt")
             return False
         self.config["previous_app_dir"] = self.config["app_dir"]
         self.config["app_dir"] = self.repository_name
@@ -213,7 +246,7 @@ class Init:
         if "previous_app_dir" in self.config \
                 and not self.config["app_exit_status"] \
                 and os.path.isdir(self.config["previous_app_dir"]): # If app ran without error (exit-status == 0), check for previous version of app and delete directory
-            print("Removing previous version directory")
+            self.logger.info("Removing previous version directory")
             subprocess.run(["rm", "-r", self.config["previous_app_dir"]], stdout=subprocess.PIPE, text=True, check=True)
             if not os.path.isdir(self.config["previous_app_dir"]):  # Make sure the directory was deleted
                 del self.config["previous_app_dir"]     # Remove key from the config dictionary
@@ -221,10 +254,11 @@ class Init:
     def evaluate_action_request(self):
         ''' Action any requests sent by the app '''
         self.config["action_request"] = self.action_request
-        print(f"Exit Status: {self.action_request}")
+        self.logger.info(f"Exit Status: {self.action_request}")
         if self.action_request is None:
-            print("App failed to start")
+            self.logger.error("App failed to start")
             # ToDo: Implement roll-back if FAIL follows update to new version
+            # ToDo: Save log file and upload to server / email to maintainer
         elif self.action_request == 0:
             print("No actionable requests sent")
         elif self.action_request == 1:
@@ -257,6 +291,13 @@ https://kamarada.github.io/en/2019/07/14/using-git-with-ssh-keys/ <- Creating SS
 https://stackoverflow.com/questions/46226174/getting-git-init-to-automatically-use-ssh <- Using SSH instead of https authentication for git processes
 https://gist.github.com/steinwaywhw/a4cd19cda655b8249d908261a62687f8 <- Getting the latest release version number
 https://devconnected.com/how-to-delete-local-and-remote-tags-on-git/
+https://stackoverflow.com/questions/2058802/how-can-i-get-the-version-defined-in-setup-py-setuptools-in-my-package/2073599#2073599
+https://stackoverflow.com/questions/458550/standard-way-to-embed-version-into-python-package
+https://stackoverflow.com/questions/17583443/what-is-the-correct-way-to-share-package-version-with-setup-py-and-the-package
+https://packaging.python.org/guides/single-sourcing-package-version/
+https://www.digitalocean.com/community/tutorials/how-to-package-and-distribute-python-applications
+https://medium.com/@amimahloof/how-to-package-a-python-project-with-all-of-its-dependencies-for-offline-install-7eb240b27418
+https://www.jetbrains.com/help/pycharm/creating-and-running-setup-py.html
 
 Resources: Python Packaging
 https://python-packaging-tutorial.readthedocs.io/en/latest/setup_py.html
