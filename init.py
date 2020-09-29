@@ -11,6 +11,7 @@ NOTE:
 Target system must have python > 3.6 installed
 Target system must have pip3 installed and a symlink pointing to pip
 Target system must have virtualenv installed
+Target system must have curl installed
 """
 
 class Init:
@@ -32,13 +33,19 @@ class Init:
             self.repository_name = self.config["app_dir"]   # Set the repository name to value stored in config file
         self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
         # Make sure module 'psutil' is installed
-        psutil_check = subprocess.run(["pip", "show", "psutil"], capture_output=True, encoding="utf-8")
-        if not psutil_check.stdout:
-            self.logger.info("Installing psutil")
-            psutil_install = subprocess.run(["pip", "install", "--user", "psutil"], stdout=subprocess.PIPE, text=True, check=True)
-            if psutil_install.returncode:
-                self.logger.error("Error: Unable to install psutil module")
+        self.install_dependencies(["psutil"])
+
         self.run()      # Run the launcher
+
+    def install_dependencies(self, dependency_list:list):
+        for dep in dependency_list:
+            module_check = subprocess.run(["pip", "show", dep], capture_output=True, encoding="utf-8")
+            if not module_check.stdout:
+                self.logger.info(f"Installing {dep}")
+                module_install = subprocess.run(["pip", "install", "--user", dep], stdout=subprocess.PIPE, text=True,
+                                                check=True)
+                if module_install.returncode:
+                    self.logger.error(f"Error: Unable to install {dep} module")
 
     def run(self):
         ''' Main execution area of launcher '''
