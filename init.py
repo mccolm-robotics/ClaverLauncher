@@ -42,8 +42,7 @@ class Init:
             module_check = subprocess.run(["pip", "show", dep], capture_output=True, encoding="utf-8")
             if not module_check.stdout:
                 self.logger.info(f"Installing {dep}")
-                module_install = subprocess.run(["pip", "install", "--user", dep], stdout=subprocess.PIPE, text=True,
-                                                check=True)
+                module_install = subprocess.run(["pip", "install", "--user", dep], stdout=subprocess.PIPE, text=True, check=True)
                 if module_install.returncode:
                     self.logger.error(f"Error: Unable to install {dep} module")
 
@@ -154,7 +153,7 @@ class Init:
             return json.load(file)
 
     def get_repository_version(self):
-        ''' Gets the version information for client module from remote repository '''
+        ''' Gets the version information of the client module from its remote repository '''
         import requests     # Make module available for this function
         # URL of version text file in remote repository
         remote_version = self.repository_raw_host_url + self.repository_class_name + "/" + self.repository_branch + "/" + "VERSION.txt"
@@ -164,7 +163,7 @@ class Init:
         else:
             return False
 
-    def check_for_updates(self):
+    def check_for_module_updates(self):
         ''' Compares version values between local and remote copies of client module '''
         remote_version = self.get_repository_version()
         if remote_version:  # Make sure the version file returned a value
@@ -212,7 +211,7 @@ class Init:
                 self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
                 self.config["version"] = self.load_version_number()
         else:
-            if self.check_for_updates():
+            if self.check_for_module_updates():
                 self.logger.info("Downloading update")
                 self.upgrade_client_app()
 
