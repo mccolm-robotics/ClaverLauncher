@@ -163,8 +163,10 @@ class Init:
         if remote_version:  # Make sure the version file returned a value
             local_version = self.load_version_number()
 
-            # This value is only relevant when the client module is loaded in a production build
-            latest_github_release = subprocess.run("curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'", capture_output=True, shell=True, encoding="utf-8")
+            # This value is only relevant when the node module is loaded using a production build
+            cmd = "curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
+            ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            release_ver = ps.communicate()[0]
 
             # Compare version numbers
             if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
@@ -234,7 +236,7 @@ class Init:
     def launch_app(self):
         ''' Dynamically loads app based on repository name. Assumes main class matches repository name. Deletes previously installed version of the app. '''
         # Import the module
-        mod = importlib.import_module(f'{self.repository_name}.src.ClaverNode')
+        mod = importlib.import_module(f'{self.repository_name}.src.{self.repository_class_name}')
         # Determine a list of names to copy to the current name space
         names = getattr(mod, '__all__', [n for n in dir(mod) if not n.startswith('_')])
         # Copy the name of the entry-point class into the current name space
