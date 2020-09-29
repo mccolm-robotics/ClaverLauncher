@@ -164,9 +164,10 @@ class Init:
             local_version = self.load_version_number()
 
             # This value is only relevant when the node module is loaded using a production build
-            cmd = "curl -s https://api.github.com/repos/mccolm-robotics/ClaverNode/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
+            cmd = "curl -s https://api.github.com/repos/mccolm-robotics/" + self.repository_class_name + "/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
             ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             release_ver = ps.communicate()[0]
+            print(release_ver.decode())
 
             # Compare version numbers
             if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
