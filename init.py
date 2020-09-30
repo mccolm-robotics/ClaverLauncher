@@ -19,25 +19,27 @@ class Init:
         self.config = None      # A dictionary representation of JSON data describing the app
         self.application = None     # Holds an instance of the entry_point class for the application loaded from the github repository linked below
         self.clock = int(time.time())   # Unix timestamp used as a name for the cloned git repository
-        self.venv_interpreter = os.getcwd() + "/venv/bin/python"    # Path to the virtual environment copy of the Python intrepreter
+        self.venv_interpreter = os.getcwd() + "/venv/bin/python"    # Path to the virtual environment Python interpreter
         self.required_modules = ["requests"]  # List of 3rd party modules required by the Claver launcher
-        self.repository_branch = "stable"   # Default branch of the git repository to load
-        self.repository_name = "ClaverNode" # Name of the git repository to load
-        self.repository_class_name = self.repository_name   # Name of the entry_point class for the application
         self.repository_host_url = "https://github.com/mccolm-robotics/"
         self.repository_raw_host_url = "https://raw.githubusercontent.com/mccolm-robotics/"
-        self.repository_url = self.repository_host_url + self.repository_name + ".git"     # Repository URL
-        self.action_request = None    # Exit status for the client node run by the launcher
+        self.client_app_repo_branch = "stable"   # Default branch of the git repository to load
+        self.client_app_repo_name = "ClaverNode" # Name of the git repository to load
+        self.client_app_repo_class_name = self.client_app_repo_name   # Name of the entry_point class for the application
+        self.client_app_repo_url = self.repository_host_url + self.client_app_repo_name + ".git"     # Repository URL
+        self.launcher_repo_branch = "stable"
+        self.launcher_repo_name = "ClaverLauncher"
+        self.launcher_repo_url = self.repository_host_url + self.launcher_repo_name + ".git"
+        self.action_request = None    # Exit status for the client app run by the launcher
         if os.path.isfile("config.txt"):    # Check to see if config file already exists
             self.load_config_file("config.txt")     # Read in file (JSON)
-            self.repository_name = self.config["app_dir"]   # Set the repository name to value stored in config file
+            self.client_app_repo_name = self.config["app_dir"]   # Set the repository name to value stored in config file
         self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
-        # Make sure module 'psutil' is installed
-        self.install_dependencies(["psutil"])
+        self.install_launcher_dependencies(["psutil"])  # Make sure module 'psutil' is installed
+        self.run_launcher()
 
-        self.run()      # Run the launcher
-
-    def install_dependencies(self, dependency_list:list):
+    def install_launcher_dependencies(self, dependency_list:list):
+        """ Install launcher dependencies """
         for dep in dependency_list:
             module_check = subprocess.run(["pip", "show", dep], capture_output=True, encoding="utf-8")
             if not module_check.stdout:
@@ -46,22 +48,27 @@ class Init:
                 if module_install.returncode:
                     self.logger.error(f"Error: Unable to install {dep} module")
 
-    def run(self):
-        ''' Main execution area of launcher '''
+    def run_launcher(self):
+        ''' Main entry-point for launcher execution '''
+        self.check_for_launcher_update()
         self.activate_venv()    # Ensures virtual environment is installed and switches over to it.
-        if self.load_client_app():  # Ensures a version of the app has been downloaded and configured to run
-            self.launch_app()   # Instantiantes and loads app (based on repo name) and deletes previously installed versions
-        self.evaluate_action_request()  # Checks for messages sent back from the app
+        if self.download_client_app():  # Ensures a version of the app has been downloaded and configured to run
+            self.launch_client_app()   # Instantiantes and loads app (based on repo name) and deletes previously installed versions
+        self.evaluate_client_app_action_request()  # Checks for messages sent back from the app
         self.save_config_file()    # Saves app config-state to config.txt
 
+    def check_for_launcher_update(self):
+        local_version, remote_version = self.get_launcher_version_numbers()
+        print(f"local: {local_version}; remote: {remote_version}")
+
     def activate_venv(self):
-        ''' Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. '''
+        """ Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. """
         # Check to see if the launcher is running with the default Python interpreter or the virtual environment interpreter
         if sys.executable != self.venv_interpreter: # Check to see of the app is using the system interpreter.
             import psutil   # Make module available in this function
             if not os.path.isdir("venv"):   # Does the virtual environment folder exist?
-                if os.path.isdir(self.repository_name):     # Check to see the repository folder exists. If so, venv has been deleted. Reload repository from stable branch.
-                    subprocess.run(["rm", "-r", self.repository_name], stdout=subprocess.PIPE, text=True, check=True)   # Remove previous repository directory
+                if os.path.isdir(self.client_app_repo_name):     # Check to see the repository folder exists. If so, venv has been deleted. Reload repository from stable branch.
+                    subprocess.run(["rm", "-r", self.client_app_repo_name], stdout=subprocess.PIPE, text=True, check=True)   # Remove previous repository directory
                     if os.path.isfile("config.txt"):    # Remove old config.txt as it is now outdated
                         subprocess.run(["rm", "config.txt"], stdout=subprocess.PIPE, text=True, check=True)     # Remove previous config file
                 create_venv = subprocess.run(["virtualenv", "venv"], stdout=subprocess.PIPE, text=True, check=True) # Create a new virtual environment
@@ -92,14 +99,14 @@ class Init:
             self.logger.debug(result)
 
     def setup_logging(self, console=logging.INFO, file=logging.WARNING):
-        ''' Set logger to capture different levels of information. Information logged to file differs (depending on settings) from information displayed to the console (stdout). '''
+        """ Set logger to capture different levels of information. Data logged to file differs (depending on settings) from data displayed to the console (stdout). """
         if not os.path.isdir("logs"):   # Check to see if the logs directory exists
             os.mkdir("logs")    # Create the directory
-        if os.path.isfile('logs/' + self.repository_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
-            os.remove('logs/' + self.repository_name + '.log')
+        if os.path.isfile('logs/' + self.client_app_repo_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
+            os.remove('logs/' + self.client_app_repo_name + '.log')
         # The first run of this program will create a log with the name of the repository.
-        if os.path.isfile('logs/' + self.repository_class_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
-            os.remove('logs/' + self.repository_class_name + '.log')
+        if os.path.isfile('logs/' + self.client_app_repo_class_name + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
+            os.remove('logs/' + self.client_app_repo_class_name + '.log')
         # Reset any previous locks on the logger
         logging.getLogger().setLevel(logging.DEBUG)
         logger = logging.getLogger('')
@@ -108,7 +115,7 @@ class Init:
         self.logger = logging.getLogger(__name__)   # Set logger to name of module
         # Create handlers
         c_handler = logging.StreamHandler(stream=sys.stdout)    # Create console logger
-        f_handler = logging.FileHandler('logs/' + self.repository_name + '.log')    # Create file logger
+        f_handler = logging.FileHandler('logs/' + self.client_app_repo_name + '.log')    # Create file logger
         c_handler.setLevel(console)     # Set logging level for console logger
         f_handler.setLevel(file)        # Set logging level for file logger
 
@@ -122,9 +129,9 @@ class Init:
         self.logger.addHandler(c_handler)
         self.logger.addHandler(f_handler)
 
-        self.logger.warning(f'Log initialized for {self.repository_name}') # The minimum logging level for the file logger is set to WARNING
+        self.logger.warning(f'Log initialized for {self.client_app_repo_name}') # The minimum logging level for the file logger is set to WARNING
 
-    def restart_program(self):
+    def restart_launcher(self):
         """ Restarts the current program """
         import psutil
         try:
@@ -137,123 +144,129 @@ class Init:
         os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
 
     def load_config_file(self, config):
-        ''' Read in the contents of JSON file (config.txt) '''
+        """ Read in the contents of JSON file (config.txt) """
         with open(config) as file:
             self.config = json.load(file)
 
     def save_config_file(self):
-        ''' Save config information in JSON format to config.txt '''
+        """ Save config information in JSON format to config.txt """
         with open('config.txt', 'w') as outfile:
             json.dump(self.config, outfile, indent=2, sort_keys=True)
 
-    def load_version_number(self):
-        ''' Loads the version file of node module and returns the contents as a dictionary '''
-        path = self.repository_name + "/VERSION.txt"
+    def load_local_version_number(self, path):
+        """ Loads the version file from the local copy of the module and returns its values as a dictionary """
         with open(path) as file:
             return json.load(file)
 
-    def get_repository_version(self):
-        ''' Gets the version information of the client module from its remote repository '''
+    def load_repository_version_number(self, path):
+        """ Downloads the version file from the remote copy of the module and returns its values as a dictionary """
         import requests     # Make module available for this function
-        # URL of version text file in remote repository
-        remote_version = self.repository_raw_host_url + self.repository_class_name + "/" + self.repository_branch + "/" + "VERSION.txt"
-        response = requests.get(remote_version)
+        response = requests.get(path)
         if response.status_code < 400:  # Make sure that the file was accessible
             return response.json()
         else:
             return False
 
-    def check_for_module_updates(self):
-        ''' Compares version values between local and remote copies of client module '''
-        remote_version = self.get_repository_version()
-        if remote_version:  # Make sure the version file returned a value
-            local_version = self.load_version_number()
-
-            # This value is only relevant when the node module is loaded using a production build
-            cmd = "curl -s https://api.github.com/repos/mccolm-robotics/" + self.repository_class_name + "/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
-            ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            release_ver = ps.communicate()[0]
-            print(release_ver.decode())
-
-            # Compare version numbers
-            if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
-                    or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
-                    or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
-                return True     # Initiate upgrade
+    def check_for_module_update(self, remote_version, local_version) -> bool:
+        """ Compares version values between local and remote copies of client module """
+        # Compare version numbers
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
+                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
+                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+            return True     # Initiate upgrade
         else:
-            self.logger.error("Error: Unable to access remote version file")
-        return False    # Local copy of the repository is at the latest version
+            return False
 
-    def load_client_app(self):
-        ''' Ensures that a running copy of the app has been downloaded. ToDo: Roll back any failed version. '''
+    def download_client_app(self):
+        """ Ensures that a running copy of the app has been downloaded. ToDo: Roll back any failed version. """
         if self.config is None:
-            config = self.repository_name + "/src/config.txt"
+            config = self.client_app_repo_name + "/src/config.txt"
             if not os.path.isfile(config):
-                clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.repository_branch, self.repository_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
+                clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.client_app_repo_branch, self.client_app_repo_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
                 if clone_git.returncode:
-                    self.logger.error(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
+                    self.logger.error(f"Error: Failed to clone app from {self.client_app_repo_url}: branch={self.client_app_repo_branch}")
                     return False
-
-                # Modules must not start with a number
-                self.repository_name = "t" + str(self.clock)
+                self.client_app_repo_name = "t" + str(self.clock)   # Modules must not start with a number
                 # Install modules listed in requirements.txt
-                requirements_path = self.repository_name + "/requirements/requirements.txt"
+                requirements_path = self.client_app_repo_name + "/requirements/requirements.txt"
                 install_requirements = subprocess.run(["pip", "install", "-r", requirements_path], stdout=subprocess.PIPE, text=True, check=True)
                 if install_requirements.returncode:
                     self.logger.error("Error: Failed to load requirements.txt")
                     return False
                 # Update path of config.txt
-                config = self.repository_name + "/src/config.txt"
+                config = self.client_app_repo_name + "/src/config.txt"
                 if not os.path.isfile(config):
                     self.logger.error("Failed to locate config file")
                     return False
                 self.load_config_file(config)
-                self.config["app_dir"] = self.repository_name   # Save the name of repository to config.txt
-                self.config["version"] = self.load_version_number()
+                self.config["app_dir"] = self.client_app_repo_name   # Save the name of repository to config.txt
+                self.config["version"] = self.load_local_version_number(self.client_app_repo_name + "/VERSION.txt")
         else:
-            if self.check_for_module_updates():
-                self.logger.info("Downloading update")
-                self.upgrade_client_app()
-
+            local_version, remote_version = self.get_client_app_version_numbers()
+            if remote_version:  # Make sure the remote version file returned a value
+                if self.check_for_module_update(remote_version, local_version):
+                    self.logger.info("Downloading update")
+                    self.upgrade_client_app()
         return True
 
+    def get_client_app_version_numbers(self):
+        # This value is only relevant when the client app module is loaded using a production build
+        cmd = "curl -s https://api.github.com/repos/mccolm-robotics/" + self.client_app_repo_class_name + "/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
+        ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        release_ver = ps.communicate()[0]
+        print(release_ver.decode())
+
+        local_version = self.load_local_version_number(self.client_app_repo_name + "/VERSION.txt")
+        # URL of version text file in remote repository
+        repository_path = self.repository_raw_host_url + self.client_app_repo_class_name + "/" + self.client_app_repo_branch + "/" + "VERSION.txt"
+        remote_version = self.load_repository_version_number(repository_path)
+        return local_version, remote_version
+
+    def get_launcher_version_numbers(self):
+        local_version = self.load_local_version_number("VERSION.txt")
+        # URL of version text file in remote repository
+        repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "VERSION.txt"
+        print(repository_path)
+        remote_version = self.load_repository_version_number(repository_path)
+        return local_version, remote_version
+
     def upgrade_client_app(self):
-        ''' Download the newest version of the client app and restart app. '''
-        clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.repository_branch, self.repository_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
+        """ Download the newest version of the client app and restart app. """
+        clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.client_app_repo_branch, self.client_app_repo_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
         if clone_git.returncode:
-            self.logger.error(f"Error: Failed to clone app from {self.repository_url}: branch={self.repository_branch}")
+            self.logger.error(f"Error: Failed to clone app from {self.client_app_repo_url}: branch={self.client_app_repo_branch}")
             return False
         # Modules must not start with a number
-        self.repository_name = "t" + str(self.clock)
+        self.client_app_repo_name = "t" + str(self.clock)
         # Install modules listed in requirements.txt
-        requirements_path = self.repository_name + "/requirements/requirements.txt"
+        requirements_path = self.client_app_repo_name + "/requirements/requirements.txt"
         install_requirements = subprocess.run(["pip", "install", "-r", requirements_path], stdout=subprocess.PIPE, text=True, check=True)
         if install_requirements.returncode:
             self.logger.error("Error: Failed to load requirements.txt")
             return False
         self.config["previous_app_dir"] = self.config["app_dir"]
-        self.config["app_dir"] = self.repository_name
+        self.config["app_dir"] = self.client_app_repo_name
         self.save_config_file()
-        self.restart_program()
+        self.restart_launcher()
 
-    def set_exit_status(self, val, **kwargs):
-        ''' Callback function passed to application module. GTK does not allow setting the exit status directly. '''
+    def client_app_exit_status(self, val, **kwargs):
+        """ Callback function passed to application module. GTK does not allow setting the exit status directly. """
         self.action_request = val
 
-    def launch_app(self):
-        ''' Dynamically loads app based on repository name. Assumes main class matches repository name. Deletes previously installed version of the app. '''
+    def launch_client_app(self):
+        """ Dynamically loads app based on repository name. Assumes main class matches repository name. Deletes previously installed version of the app. """
         # Import the module
-        mod = importlib.import_module(f'{self.repository_name}.src.{self.repository_class_name}')
+        mod = importlib.import_module(f'{self.client_app_repo_name}.src.{self.client_app_repo_class_name}')
         # Determine a list of names to copy to the current name space
         names = getattr(mod, '__all__', [n for n in dir(mod) if not n.startswith('_')])
         # Copy the name of the entry-point class into the current name space
         g = globals()
         for name in names:
             # Look for the class that matches the repository name
-            if name == self.repository_class_name:
+            if name == self.client_app_repo_class_name:
                 entry_point = getattr(mod, name)
                 g[name] = entry_point
-        self.application = entry_point(self.set_exit_status)    # Instantiate app class
+        self.application = entry_point(self.client_app_exit_status)    # Instantiate app class
         self.config["app_exit_status"] = self.application.run()     # Entry-point for GTK applications is run()
         if "previous_app_dir" in self.config \
                 and not self.config["app_exit_status"] \
@@ -265,8 +278,8 @@ class Init:
             if not os.path.isdir(self.config["previous_app_dir"]):  # Make sure the directory was deleted
                 del self.config["previous_app_dir"]     # Remove key from the config dictionary
 
-    def evaluate_action_request(self):
-        ''' Action any requests sent by the app '''
+    def evaluate_client_app_action_request(self):
+        """ Action any requests sent by the app """
         self.config["action_request"] = self.action_request
         self.logger.info(f"Exit Status: {self.action_request}")
         if self.action_request is None:
