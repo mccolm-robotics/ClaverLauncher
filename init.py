@@ -58,8 +58,15 @@ class Init:
         self.save_config_file()    # Saves app config-state to config.txt
 
     def check_for_launcher_update(self):
-        local_version, remote_version = self.get_launcher_version_numbers()
-        print(f"local: {local_version}; remote: {remote_version}")
+        import requests
+        local, remote = self.get_launcher_version_numbers()
+        if self.check_for_module_update(local_version=local, remote_version=remote):
+            print("Updating launcher")
+            url = repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "updater.py"
+            updater_file = requests.get(url)
+            with open('updater.py', 'wb') as file:
+                file.write(updater_file.content)
+
 
     def activate_venv(self):
         """ Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. """
@@ -167,13 +174,15 @@ class Init:
         else:
             return False
 
-    def check_for_module_update(self, remote_version, local_version) -> bool:
+    def check_for_module_update(self, local_version, remote_version) -> bool:
         """ Compares version values between local and remote copies of client module """
         # Compare version numbers
-        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
-                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
-                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
-            return True     # Initiate upgrade
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]):
+            return True
+        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) > int(local_version["MINOR"]):
+            return True
+        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) >= int(local_version["MINOR"]) and int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+            return True
         else:
             return False
 
@@ -204,7 +213,7 @@ class Init:
         else:
             local_version, remote_version = self.get_client_app_version_numbers()
             if remote_version:  # Make sure the remote version file returned a value
-                if self.check_for_module_update(remote_version, local_version):
+                if self.check_for_module_update(local_version=local_version, remote_version=remote_version):
                     self.logger.info("Downloading update")
                     self.upgrade_client_app()
         return True
@@ -226,7 +235,6 @@ class Init:
         local_version = self.load_local_version_number("VERSION.txt")
         # URL of version text file in remote repository
         repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "VERSION.txt"
-        print(repository_path)
         remote_version = self.load_repository_version_number(repository_path)
         return local_version, remote_version
 
