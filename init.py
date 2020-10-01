@@ -34,9 +34,6 @@ class Init:
         if os.path.isfile("config.txt"):    # Check to see if config file already exists
             self.load_config_file("config.txt")     # Read in file (JSON)
             self.client_app_repo_name = self.config["app_dir"]   # Set the repository name to value stored in config file
-            if "dev_branch" in self.config:
-                self.client_app_repo_branch = self.config["dev_branch"]
-                self.launcher_repo_branch = self.config["dev_branch"]
         self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
         self.install_launcher_dependencies(["psutil"])  # Make sure module 'psutil' is installed
         self.run_launcher()
@@ -52,7 +49,7 @@ class Init:
                     self.logger.error(f"Error: Unable to install {dep} module")
 
     def run_launcher(self):
-        """ Main entry-point for launcher execution """
+        ''' Main entry-point for launcher execution '''
         self.check_for_launcher_update()
         self.activate_venv()    # Ensures virtual environment is installed and switches over to it.
         if self.download_client_app():  # Ensures a version of the app has been downloaded and configured to run
@@ -61,15 +58,8 @@ class Init:
         self.save_config_file()    # Saves app config-state to config.txt
 
     def check_for_launcher_update(self):
-        """ Compare local launcher version to repository version number. Download updater file and upgrade launcher if remote is newer. """
-        import requests
-        local, remote = self.get_launcher_version_numbers()
-        if self.check_for_module_update(local_version=local, remote_version=remote):
-            print("Updating launcher")
-            url = repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "updater.py"
-            updater_file = requests.get(url)
-            with open('updater.py', 'wb') as file:
-                file.write(updater_file.content)
+        local_version, remote_version = self.get_launcher_version_numbers()
+        print(f"local: {local_version}; remote: {remote_version}")
 
     def activate_venv(self):
         """ Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. """
@@ -177,15 +167,13 @@ class Init:
         else:
             return False
 
-    def check_for_module_update(self, local_version, remote_version) -> bool:
+    def check_for_module_update(self, remote_version, local_version) -> bool:
         """ Compares version values between local and remote copies of client module """
         # Compare version numbers
-        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]):
-            return True
-        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) > int(local_version["MINOR"]):
-            return True
-        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) >= int(local_version["MINOR"]) and int(remote_version["PATCH"]) > int(local_version["PATCH"]):
-            return True
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
+                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
+                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+            return True     # Initiate upgrade
         else:
             return False
 
@@ -216,13 +204,12 @@ class Init:
         else:
             local_version, remote_version = self.get_client_app_version_numbers()
             if remote_version:  # Make sure the remote version file returned a value
-                if self.check_for_module_update(local_version=local_version, remote_version=remote_version):
+                if self.check_for_module_update(remote_version, local_version):
                     self.logger.info("Downloading update")
                     self.upgrade_client_app()
         return True
 
     def get_client_app_version_numbers(self):
-        """ Get the version number of the local launcher and from the remote repository """
         # This value is only relevant when the client app module is loaded using a production build
         cmd = "curl -s https://api.github.com/repos/mccolm-robotics/" + self.client_app_repo_class_name + "/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
         ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -236,10 +223,10 @@ class Init:
         return local_version, remote_version
 
     def get_launcher_version_numbers(self):
-        """ Get the version number of the local launcher and from the remote repository """
         local_version = self.load_local_version_number("VERSION.txt")
         # URL of version text file in remote repository
         repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "VERSION.txt"
+        print(repository_path)
         remote_version = self.load_repository_version_number(repository_path)
         return local_version, remote_version
 
@@ -300,13 +287,10 @@ class Init:
             # ToDo: Implement roll-back if FAIL follows update to new version
             # ToDo: Save log file and upload to server / email to maintainer
         elif self.action_request == 0:
-            print("Client app did not request additional action")
+            print("No actionable requests sent")
         elif self.action_request == 1:
             print("Request to upgrade app")
             self.upgrade_client_app()
-        elif self.action_request == 2:
-            print("Request to run app in development mode")
-            # ToDo: set dev mode in config.txt and restart launcher
 
 
 if __name__ == "__main__":
