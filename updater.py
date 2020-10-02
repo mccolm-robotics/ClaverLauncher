@@ -12,9 +12,9 @@ class Updater:
         self.launcher_repo_branch = "stable"
         self.launcher_repo_name = "ClaverLauncher"
         self.updater_log = "updater"
-        self.setup_logging()
         if os.path.isfile("config.txt"):    # Check to see if config file already exists
             self.load_config_file("config.txt")     # Read in file (JSON)
+        self.setup_logging(file=logging.INFO)
         self.config["launcher_updated"] = self.launcher_repo_branch
         self.run_updater()
 
@@ -24,8 +24,8 @@ class Updater:
 
         self.rename_file(current_name="init.py", new_name="old_init.py")
         self.config["previous_launcher"] = "old_init.py"
-        self.config["previous_launcher_version"] = self.load_version_file("VERSION.txt")
         self.rename_file(current_name="VERSION.txt", new_name="OLD_VERSION.txt")
+        self.config["previous_launcher_version"] = "OLD_VERSION.txt"
         self.save_remote_file(repository_url + "/init.py", "init.py")
         self.save_remote_file(repository_url + "/VERSION.txt", "VERSION.txt")
 
@@ -49,11 +49,6 @@ class Updater:
         with open(config) as file:
             self.config = json.load(file)
 
-    def load_version_file(self, version):
-        """ Loads the version file from the local copy of the module and returns its values as a dictionary """
-        with open(version) as file:
-            return json.load(file)
-
     def save_config_file(self):
         """ Save config information in JSON format to config.txt """
         with open('config.txt', 'w') as outfile:
@@ -65,6 +60,8 @@ class Updater:
             os.mkdir("logs")    # Create the directory
         if os.path.isfile('logs/' + self.updater_log + '.log'):  # Logs will be retained on a per-run basis. Delete log from previous run.
             os.remove('logs/' + self.updater_log + '.log')
+
+        self.config["updater_log_file"] = self.updater_log + '.log'
 
         # Reset any previous locks on the logger
         logging.getLogger().setLevel(logging.DEBUG)
@@ -88,7 +85,7 @@ class Updater:
         self.logger.addHandler(c_handler)
         self.logger.addHandler(f_handler)
 
-        self.logger.warning(f'Log initialized for {self.updater_log}') # The minimum logging level for the file logger is set to WARNING
+        self.logger.info(f'Log initialized for {self.updater_log}') # The minimum logging level for the file logger is set to WARNING
 
     def start_launcher(self, path):
         """ Restarts the current program """

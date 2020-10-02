@@ -278,6 +278,22 @@ class Init:
             if not os.path.isdir(self.config["previous_app_dir"]):  # Make sure the directory was deleted
                 del self.config["previous_app_dir"]     # Remove key from the config dictionary
 
+    def cleanup_previous_upgrade(self):
+        if os.path.isfile(self.config["previous_launcher"]):
+            os.remove('logs/' + self.config["previous_launcher"])
+            print(f"Deleting {self.config['previous_launcher']}")
+        if "previous_launcher_version" in self.config:
+            if os.path.isfile(self.config["previous_launcher_version"]):
+                os.remove('logs/' + self.config["previous_launcher_version"])
+                print(f"Deleting {self.config['previous_launcher_version']}")
+        if "updater_log_file" in self.config:
+            if os.path.isfile('logs/' + self.config["updater_log_file"]):
+                os.remove('logs/' + self.config["updater_log_file"])
+                print(f"Deleting {self.config['updater_log_file']}")
+        del self.config["previous_launcher"]
+        del self.config["previous_launcher_version"]
+        del self.config["updater_log_file"]
+
     def evaluate_client_app_action_request(self):
         """ Action any requests sent by the app """
         self.config["action_request"] = self.action_request
@@ -286,11 +302,14 @@ class Init:
             self.logger.error("App failed to start")
             # ToDo: Implement roll-back if FAIL follows update to new version
             # ToDo: Save log file and upload to server / email to maintainer
-        elif self.action_request == 0:
-            print("No actionable requests sent")
-        elif self.action_request == 1:
-            print("Request to upgrade app")
-            self.upgrade_client_app()
+        else:
+            if self.action_request == 0:
+                print("No actionable requests sent")
+            elif self.action_request == 1:
+                print("Request to upgrade app")
+                self.upgrade_client_app()
+            if "previous_launcher" in self.config:
+                self.cleanup_previous_upgrade()
 
 
 if __name__ == "__main__":
