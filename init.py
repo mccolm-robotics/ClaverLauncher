@@ -57,9 +57,20 @@ class Init:
         self.evaluate_client_app_action_request()  # Checks for messages sent back from the app
         self.save_config_file()    # Saves app config-state to config.txt
 
+    def save_remote_file(self, url, file_name):
+        import requests
+        remote_file = requests.get(url)
+        if remote_file.status_code < 400:
+            with open(file_name, 'wb') as file:
+                file.write(remote_file.content)
+
     def check_for_launcher_update(self):
-        local_version, remote_version = self.get_launcher_version_numbers()
-        print(f"local: {local_version}; remote: {remote_version}")
+        remote_version, local_version = self.get_launcher_version_numbers()
+        if self.check_for_module_update(remote_version=remote_version, local_version=local_version):
+            print("Downloading and running updater.py")
+            updater_url = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/updater.py"
+            self.save_remote_file(updater_url, "updater.py")
+            self.restart_launcher(os.getcwd() + "/updater.py")
 
     def activate_venv(self):
         """ Activates the virtual environment. This function restarts the app and switches over to using the venv interpreter. """
@@ -74,14 +85,15 @@ class Init:
                 create_venv = subprocess.run(["virtualenv", "venv"], stdout=subprocess.PIPE, text=True, check=True) # Create a new virtual environment
                 if create_venv.returncode:
                     self.logger.error("Error: Failed to create VirtualEnv")
-            try:
-                p = psutil.Process(os.getpid())     # Get the current process id of this launcher
-                for handler in p.open_files() + p.connections():    # Close any open files and connections held by this process
-                    os.close(handler.fd)
-            except Exception as e:
-                self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
-            # Relaunch application using virtual environment interpreter
-            os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
+            # try:
+            #     p = psutil.Process(os.getpid())     # Get the current process id of this launcher
+            #     for handler in p.open_files() + p.connections():    # Close any open files and connections held by this process
+            #         os.close(handler.fd)
+            # except Exception as e:
+            #     self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
+            # # Relaunch application using virtual environment interpreter
+            # os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
+            self.restart_launcher(*sys.argv)
         else:
             # Executes after application has restarted. Changes path variables to point to venv interpreter.
             exec(open("venv/bin/activate_this.py").read(), {'__file__': "venv/bin/activate_this.py"})
@@ -131,7 +143,7 @@ class Init:
 
         self.logger.warning(f'Log initialized for {self.client_app_repo_name}') # The minimum logging level for the file logger is set to WARNING
 
-    def restart_launcher(self):
+    def restart_launcher(self, target):
         """ Restarts the current program """
         import psutil
         try:
@@ -141,7 +153,7 @@ class Init:
         except Exception as e:
             self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
         # Relaunch application using virtual environment interpreter
-        os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
+        os.execl(self.venv_interpreter, self.venv_interpreter, target)
 
     def load_config_file(self, config):
         """ Read in the contents of JSON file (config.txt) """
@@ -202,9 +214,9 @@ class Init:
                 self.config["app_dir"] = self.client_app_repo_name   # Save the name of repository to config.txt
                 self.config["version"] = self.load_local_version_number(self.client_app_repo_name + "/VERSION.txt")
         else:
-            local_version, remote_version = self.get_client_app_version_numbers()
+            remote_version, local_version = self.get_client_app_version_numbers()
             if remote_version:  # Make sure the remote version file returned a value
-                if self.check_for_module_update(remote_version, local_version):
+                if self.check_for_module_update(remote_version=remote_version, local_version=local_version):
                     self.logger.info("Downloading update")
                     self.upgrade_client_app()
         return True
@@ -220,15 +232,14 @@ class Init:
         # URL of version text file in remote repository
         repository_path = self.repository_raw_host_url + self.client_app_repo_class_name + "/" + self.client_app_repo_branch + "/" + "VERSION.txt"
         remote_version = self.load_repository_version_number(repository_path)
-        return local_version, remote_version
+        return remote_version, local_version
 
     def get_launcher_version_numbers(self):
         local_version = self.load_local_version_number("VERSION.txt")
         # URL of version text file in remote repository
         repository_path = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "VERSION.txt"
-        print(repository_path)
         remote_version = self.load_repository_version_number(repository_path)
-        return local_version, remote_version
+        return remote_version, local_version
 
     def upgrade_client_app(self):
         """ Download the newest version of the client app and restart app. """
@@ -247,7 +258,7 @@ class Init:
         self.config["previous_app_dir"] = self.config["app_dir"]
         self.config["app_dir"] = self.client_app_repo_name
         self.save_config_file()
-        self.restart_launcher()
+        self.restart_launcher(*sys.argv)
 
     def client_app_exit_status(self, val, **kwargs):
         """ Callback function passed to application module. GTK does not allow setting the exit status directly. """
@@ -280,11 +291,11 @@ class Init:
 
     def cleanup_previous_upgrade(self):
         if os.path.isfile(self.config["previous_launcher"]):
-            os.remove('logs/' + self.config["previous_launcher"])
+            os.remove(self.config["previous_launcher"])
             print(f"Deleting {self.config['previous_launcher']}")
         if "previous_launcher_version" in self.config:
             if os.path.isfile(self.config["previous_launcher_version"]):
-                os.remove('logs/' + self.config["previous_launcher_version"])
+                os.remove(self.config["previous_launcher_version"])
                 print(f"Deleting {self.config['previous_launcher_version']}")
         if "updater_log_file" in self.config:
             if os.path.isfile('logs/' + self.config["updater_log_file"]):
