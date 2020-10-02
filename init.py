@@ -34,6 +34,9 @@ class Init:
         if os.path.isfile("config.txt"):    # Check to see if config file already exists
             self.load_config_file("config.txt")     # Read in file (JSON)
             self.client_app_repo_name = self.config["app_dir"]   # Set the repository name to value stored in config file
+            if "dev_branch" in self.config:
+                self.client_app_repo_branch = self.config["dev_branch"]
+                self.launcher_repo_branch = self.config["dev_branch"]
         self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
         self.install_launcher_dependencies(["psutil"])  # Make sure module 'psutil' is installed
         self.run_launcher()
@@ -85,14 +88,6 @@ class Init:
                 create_venv = subprocess.run(["virtualenv", "venv"], stdout=subprocess.PIPE, text=True, check=True) # Create a new virtual environment
                 if create_venv.returncode:
                     self.logger.error("Error: Failed to create VirtualEnv")
-            # try:
-            #     p = psutil.Process(os.getpid())     # Get the current process id of this launcher
-            #     for handler in p.open_files() + p.connections():    # Close any open files and connections held by this process
-            #         os.close(handler.fd)
-            # except Exception as e:
-            #     self.logger.error("Error: Unable to close files and connections held by process", exc_info=True)
-            # # Relaunch application using virtual environment interpreter
-            # os.execl(self.venv_interpreter, self.venv_interpreter, *sys.argv)
             self.restart_launcher(*sys.argv)
         else:
             # Executes after application has restarted. Changes path variables to point to venv interpreter.
@@ -182,10 +177,12 @@ class Init:
     def check_for_module_update(self, remote_version, local_version) -> bool:
         """ Compares version values between local and remote copies of client module """
         # Compare version numbers
-        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]) \
-                or int(remote_version["MINOR"]) > int(local_version["MINOR"]) \
-                or int(remote_version["PATCH"]) > int(local_version["PATCH"]):
-            return True     # Initiate upgrade
+        if int(remote_version["MAJOR"]) > int(local_version["MAJOR"]):
+            return True
+        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) > int(local_version["MINOR"]):
+            return True
+        elif int(remote_version["MAJOR"]) >= int(local_version["MAJOR"]) and int(remote_version["MINOR"]) >= int(local_version["MINOR"]) and int(remote_version["PATCH"]) > int(local_version["PATCH"]):
+            return True
         else:
             return False
 
@@ -315,10 +312,13 @@ class Init:
             # ToDo: Save log file and upload to server / email to maintainer
         else:
             if self.action_request == 0:
-                print("No actionable requests sent")
+                print("Client app did not request additional action")
             elif self.action_request == 1:
                 print("Request to upgrade app")
                 self.upgrade_client_app()
+            elif self.action_request == 2:
+                print("Request to run app in development mode")
+                # ToDo: set dev mode in config.txt and restart launcher
             if "previous_launcher" in self.config:
                 self.cleanup_previous_upgrade()
 
