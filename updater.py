@@ -20,25 +20,39 @@ class Updater:
 
     def run_updater(self):
         """ Main entry-point of class """
-        previous_init_name = "old_init.py"
-        current_init_name = "init.py"
-        os.rename(current_init_name, previous_init_name)         # Rename current init file
-        self.logger.info(f"{current_init_name} renamed to {previous_init_name}")
-        self.config["previous_launcher"] = previous_init_name
+        repository_url = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch
 
-        repository_url = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/" + "init.py"
-        init_file = requests.get(repository_url)
-        if init_file.status_code < 400:
-            with open('init.py', 'wb') as file:
-                file.write(init_file.content)
+        self.rename_file(current_name="init.py", new_name="old_init.py")
+        self.config["previous_launcher"] = "old_init.py"
+        self.config["previous_launcher_version"] = self.load_version_file("VERSION.txt")
+        self.rename_file(current_name="VERSION.txt", new_name="OLD_VERSION.txt")
+        self.save_remote_file(repository_url + "/init.py", "init.py")
+        self.save_remote_file(repository_url + "/VERSION.txt", "VERSION.txt")
+
+        # Restart launcher
         self.save_config_file()
         module_path = os.getcwd() + "/init.py"
         self.start_launcher(module_path)
+
+    def save_remote_file(self, url, file_name):
+        remote_file = requests.get(url)
+        if remote_file.status_code < 400:
+            with open(file_name, 'wb') as file:
+                file.write(remote_file.content)
+
+    def rename_file(self, current_name, new_name):
+        os.rename(current_name, new_name)  # Rename current init file
+        self.logger.info(f"{current_name} renamed to {new_name}")
 
     def load_config_file(self, config):
         """ Read in the contents of JSON file (config.txt) """
         with open(config) as file:
             self.config = json.load(file)
+
+    def load_version_file(self, version):
+        """ Loads the version file from the local copy of the module and returns its values as a dictionary """
+        with open(version) as file:
+            return json.load(file)
 
     def save_config_file(self):
         """ Save config information in JSON format to config.txt """
