@@ -321,6 +321,7 @@ class Init:
                 # ToDo: set dev mode in config.txt and restart launcher
             if "previous_launcher" in self.config:
                 self.cleanup_previous_upgrade()
+            print("System argment: {}".format(*sys.argv))
 
 
 if __name__ == "__main__":
