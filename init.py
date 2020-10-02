@@ -37,11 +37,11 @@ class Init:
             if "dev_branch" in self.config:
                 self.client_app_repo_branch = self.config["dev_branch"]
                 self.launcher_repo_branch = self.config["dev_branch"]
-        self.setup_logging(console=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
-        self.install_launcher_dependencies(["psutil"])  # Make sure module 'psutil' is installed
+        self.setup_logging(console=logging.INFO, file=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
+        self.install_launcher_dependencies(["psutil", "requests"])
         self.run_launcher()
 
-    def install_launcher_dependencies(self, dependency_list:list):
+    def install_launcher_dependencies(self, dependency_list: list):
         """ Install launcher dependencies """
         for dep in dependency_list:
             module_check = subprocess.run(["pip", "show", dep], capture_output=True, encoding="utf-8")
@@ -53,8 +53,8 @@ class Init:
 
     def run_launcher(self):
         ''' Main entry-point for launcher execution '''
-        self.check_for_launcher_update()
         self.activate_venv()    # Ensures virtual environment is installed and switches over to it.
+        self.check_for_launcher_update()
         if self.download_client_app():  # Ensures a version of the app has been downloaded and configured to run
             self.launch_client_app()   # Instantiantes and loads app (based on repo name) and deletes previously installed versions
         self.evaluate_client_app_action_request()  # Checks for messages sent back from the app
@@ -70,7 +70,7 @@ class Init:
     def check_for_launcher_update(self):
         remote_version, local_version = self.get_launcher_version_numbers()
         if self.check_for_module_update(remote_version=remote_version, local_version=local_version):
-            print("Downloading and running updater.py")
+            self.logger.info("Downloading and running updater.py")
             updater_url = self.repository_raw_host_url + self.launcher_repo_name + "/" + self.launcher_repo_branch + "/updater.py"
             self.save_remote_file(updater_url, "updater.py")
             self.restart_launcher(os.getcwd() + "/updater.py")
@@ -136,7 +136,7 @@ class Init:
         self.logger.addHandler(c_handler)
         self.logger.addHandler(f_handler)
 
-        self.logger.warning(f'Log initialized for {self.client_app_repo_name}') # The minimum logging level for the file logger is set to WARNING
+        self.logger.info(f'Log initialized for {self.client_app_repo_name}') # The minimum logging level for the file logger is set to WARNING
 
     def restart_launcher(self, target):
         """ Restarts the current program """
@@ -223,7 +223,7 @@ class Init:
         cmd = "curl -s https://api.github.com/repos/mccolm-robotics/" + self.client_app_repo_class_name + "/releases/latest | grep -oP '\"tag_name\": \"\K(.*)(?=\")'"
         ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         release_ver = ps.communicate()[0]
-        print(release_ver.decode())
+        # print(release_ver.decode())
 
         local_version = self.load_local_version_number(self.client_app_repo_name + "/VERSION.txt")
         # URL of version text file in remote repository
@@ -321,8 +321,6 @@ class Init:
                 # ToDo: set dev mode in config.txt and restart launcher
             if "previous_launcher" in self.config:
                 self.cleanup_previous_upgrade()
-            print("System argment: {}".format(*sys.argv))
-
 
 if __name__ == "__main__":
     Init()

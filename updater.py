@@ -15,7 +15,7 @@ class Updater:
         if os.path.isfile("config.txt"):    # Check to see if config file already exists
             self.load_config_file("config.txt")     # Read in file (JSON)
         self.setup_logging(file=logging.INFO)
-        self.config["launcher_updated"] = self.launcher_repo_branch
+        # self.config["launcher_updated"] = self.launcher_repo_branch
         self.run_updater()
 
     def run_updater(self):
