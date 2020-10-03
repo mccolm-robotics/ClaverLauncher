@@ -24,7 +24,7 @@ class Init:
         self.repository_host_url = "https://github.com/mccolm-robotics/"
         self.repository_raw_host_url = "https://raw.githubusercontent.com/mccolm-robotics/"
         self.client_app_repo_branch = "stable"   # Default branch of the git repository to load
-        self.client_app_repo_name = "ClaverNode" # Name of the git repository to load
+        self.client_app_repo_name = "ClaverMessageBoard" # Name of the git repository to load
         self.client_app_repo_class_name = self.client_app_repo_name   # Name of the entry_point class for the application
         self.client_app_repo_url = self.repository_host_url + self.client_app_repo_name + ".git"     # Repository URL
         self.launcher_repo_branch = "stable"
@@ -37,7 +37,7 @@ class Init:
             if "dev_branch" in self.config:
                 self.client_app_repo_branch = self.config["dev_branch"]
                 self.launcher_repo_branch = self.config["dev_branch"]
-        self.setup_logging(console=logging.INFO, file=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
+        self.setup_logging(console=logging.DEBUG, file=logging.INFO)    # Set the logging level for launcher. DEBUG == verbose
         self.install_launcher_dependencies(["psutil", "requests"])
         self.run_launcher()
 
@@ -140,6 +140,7 @@ class Init:
 
     def restart_launcher(self, target):
         """ Restarts the current program """
+        self.install_launcher_dependencies(["psutil"])
         import psutil
         try:
             p = psutil.Process(os.getpid())
@@ -189,7 +190,8 @@ class Init:
     def download_client_app(self):
         """ Ensures that a running copy of the app has been downloaded. ToDo: Roll back any failed version. """
         if self.config is None:
-            config = self.client_app_repo_name + "/src/config.txt"
+            config_path = "/interface/config.txt"
+            config = self.client_app_repo_name + config_path
             if not os.path.isfile(config):
                 clone_git = subprocess.run(["git", "clone", "--single-branch", "--branch", self.client_app_repo_branch, self.client_app_repo_url, "t" + str(self.clock)], stdout=subprocess.PIPE, text=True, check=True)
                 if clone_git.returncode:
@@ -203,7 +205,7 @@ class Init:
                     self.logger.error("Error: Failed to load requirements.txt")
                     return False
                 # Update path of config.txt
-                config = self.client_app_repo_name + "/src/config.txt"
+                config = self.client_app_repo_name + config_path
                 if not os.path.isfile(config):
                     self.logger.error("Failed to locate config file")
                     return False
@@ -264,7 +266,7 @@ class Init:
     def launch_client_app(self):
         """ Dynamically loads app based on repository name. Assumes main class matches repository name. Deletes previously installed version of the app. """
         # Import the module
-        mod = importlib.import_module(f'{self.client_app_repo_name}.src.{self.client_app_repo_class_name}')
+        mod = importlib.import_module(f'{self.client_app_repo_name}.{self.client_app_repo_class_name}')
         # Determine a list of names to copy to the current name space
         names = getattr(mod, '__all__', [n for n in dir(mod) if not n.startswith('_')])
         # Copy the name of the entry-point class into the current name space
